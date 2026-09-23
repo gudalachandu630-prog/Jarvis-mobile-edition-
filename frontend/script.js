@@ -1,5 +1,35 @@
 // ===== 3. TOOLS (THE HANDS) =====
-async function handleTools(text) {
+async function askGemini(p) {
+
+    // ===== TOOL ROUTER =====
+    const toolReply = await handleTools(p);
+
+    if (toolReply) {
+
+        MEMORY.push({
+            role: 'user',
+            text: p
+        });
+
+        MEMORY.push({
+            role: 'model',
+            text: toolReply
+        });
+
+        saveMemory();
+
+        add('J.A.R.V.I.S: ' + toolReply, 'ai');
+
+        speak(toolReply);
+
+        return;
+    }
+
+    // ===== GEMINI BRAIN =====
+    add('J.A.R.V.I.S: Thinking...', 'ai');
+
+    // KEEP YOUR EXISTING GEMINI CODE HERE
+}async function handleTools(text) {
     const t = text.toLowerCase();
 
     // =========================
