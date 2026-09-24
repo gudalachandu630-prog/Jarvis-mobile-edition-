@@ -2,7 +2,57 @@
 // J.A.R.V.I.S MOBILE EDITION — EPISODE 05
 // MEMORY + VISION + VOICE + GEMINI
 // =====================================================
+async function askGemini(promptText) {
 
+    // ==========================================
+    // EPISODE 06 TOOL ROUTER
+    // ==========================================
+
+    const toolReply =
+        await handleTools(promptText);
+
+
+    if (toolReply) {
+
+        MEMORY.push({
+            role: "user",
+            text: promptText
+        });
+
+
+        MEMORY.push({
+            role: "model",
+            text: toolReply
+        });
+
+
+        saveMemory();
+
+
+        add(
+            "J.A.R.V.I.S: " + toolReply,
+            "ai"
+        );
+
+
+        speak(toolReply);
+
+
+        return;
+    }
+
+
+    // ==========================================
+    // NORMAL EPISODE 05 GEMINI BRAIN
+    // ==========================================
+
+    add(
+        "J.A.R.V.I.S: Thinking...",
+        "ai"
+    );
+
+    // KEEP THE REST OF YOUR CURRENT askGemini()
+    // CODE BELOW THIS LINE
 
 // =====================================================
 // 1. API KEY
