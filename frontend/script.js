@@ -1,19 +1,7 @@
 // ============================================================
 // J.A.R.V.I.S — EPISODE 7
-// CLEAN WORKING SCRIPT.JS
+// Full working version + Voice Input + Voice Output
 // ============================================================
-
-// ===================== 1. API KEY =====================
-
-let API_KEY = localStorage.getItem("jarvis_key");
-
-if (!API_KEY) {
-    API_KEY = prompt("Enter your Gemini API Key:");
-
-    if (API_KEY) {
-        localStorage.setItem("jarvis_key", API_KEY);
-    }
-}
 
 const MODELS = [
     "gemini-3.6-flash",
@@ -21,943 +9,737 @@ const MODELS = [
     "gemini-flash-latest"
 ];
 
+const MEMORY_KEY = "jarvis_memory";
 
-// ===================== 2. ELEMENTS =====================
+// ============================================================
+// ELEMENTS
+// ============================================================
 
 const chat = document.getElementById("chat");
-const input = document.getElementById("msg");
-const micBtn = document.getElementById("mic-btn");
-const clearBtn = document.getElementById("clear-btn");
-const camBtn = document.getElementById("cam-btn");
-const imgInput = document.getElementById("img-input");
+const msg = document.getElementById("msg");
 
-// Support either a button or form submit
 const sendBtn =
     document.getElementById("send-btn") ||
     document.getElementById("send") ||
     document.querySelector('button[type="submit"]');
 
+const micBtn = document.getElementById("mic-btn");
+const camBtn = document.getElementById("cam-btn");
+const clearBtn = document.getElementById("clear-btn");
+const imgInput = document.getElementById("img-input");
 
-// ===================== 3. MEMORY =====================
+// ============================================================
+// MEMORY
+// ============================================================
 
-let MEMORY = [];
-
-try {
-    const stored = JSON.parse(
-        localStorage.getItem("jarvis_memory") || "[]"
-    );
-
-    if (Array.isArray(stored)) {
-        MEMORY = stored.filter(
-            m =>
-                m &&
-                (m.role === "user" || m.role === "model") &&
-                typeof m.text === "string"
-        );
+function getMemory() {
+    try {
+        return JSON.parse(localStorage.getItem(MEMORY_KEY) || "[]");
+    } catch {
+        return [];
     }
-} catch (e) {
-    MEMORY = [];
 }
 
-function saveMemory() {
-    localStorage.setItem(
-        "jarvis_memory",
-        JSON.stringify(MEMORY.slice(-50))
-    );
-}
+function saveMemory(role, text) {
+    const memory = getMemory();
 
-function remember(role, text) {
-    MEMORY.push({
+    memory.push({
         role: role,
-        text: String(text)
+        text: String(text),
+        time: new Date().toISOString()
     });
 
-    MEMORY = MEMORY.slice(-50);
-    saveMemory();
+    // Keep memory from becoming too large
+    if (memory.length > 30) {
+        memory.splice(0, memory.length - 30);
+    }
+
+    localStorage.setItem(MEMORY_KEY, JSON.stringify(memory));
 }
 
+function clearMemory() {
+    localStorage.removeItem(MEMORY_KEY);
 
-// ===================== 4. CHAT DISPLAY =====================
+    if (chat) {
+        chat.innerHTML = "";
+    }
 
-function add(text, type = "ai") {
+    addMessage("J.A.R.V.I.S", "Memory cleared.");
+    speakJarvis("Memory cleared.");
+}
+
+// ============================================================
+// CHAT DISPLAY
+// ============================================================
+
+function addMessage(sender, text) {
     if (!chat) return;
 
-    const div = document.createElement("div");
+    const box = document.createElement("div");
 
-    div.className =
-        type === "user"
-            ? "message user"
-            : "message ai";
+    box.className =
+        sender.toLowerCase().includes("user")
+            ? "user-message"
+            : "jarvis-message";
 
-    div.textContent = text;
+    box.textContent = `${sender}: ${text}`;
 
-    chat.appendChild(div);
+    chat.appendChild(box);
     chat.scrollTop = chat.scrollHeight;
 }
 
-function showMemory() {
-    if (!chat) return;
+// ============================================================
+// J.A.R.V.I.S VOICE OUTPUT
+// ============================================================
 
-    MEMORY.forEach(m => {
-        add(
-            (m.role === "user" ? "YOU: " : "J.A.R.V.I.S: ") +
-            m.text,
-            m.role === "user" ? "user" : "ai"
-        );
+let jarvisVoice = null;
+
+function loadJarvisVoice() {
+    if (!("speechSynthesis" in window)) {
+        console.log("Speech synthesis is not supported.");
+        return;
+    }
+
+    const voices = window.speechSynthesis.getVoices();
+
+    if (!voices.length) return;
+
+    jarvisVoice =
+        voices.find(v => /en-IN/i.test(v.lang)) ||
+        voices.find(v => /en-US/i.test(v.lang)) ||
+        voices.find(v => /^en/i.test(v.lang)) ||
+        voices[0];
+
+    console.log("J.A.R.V.I.S voice:", jarvisVoice.name);
+}
+
+if ("speechSynthesis" in window) {
+    loadJarvisVoice();
+
+    window.speechSynthesis.onvoiceschanged = () => {
+        loadJarvisVoice();
+    };
+}
+
+function speakJarvis(text) {
+    if (!("speechSynthesis" in window)) {
+        console.log("Speech synthesis not supported.");
+        return;
+    }
+
+    if (!text) return;
+
+    const cleanText = String(text)
+        .replace(/^J\.A\.R\.V\.I\.S\s*:\s*/i, "")
+        .replace(/\*/g, "")
+        .replace(/```[\s\S]*?```/g, "")
+        .trim();
+
+    if (!cleanText) return;
+
+    window.speechSynthesis.cancel();
+
+    const speech = new SpeechSynthesisUtterance(cleanText);
+
+    if (jarvisVoice) {
+        speech.voice = jarvisVoice;
+        speech.lang = jarvisVoice.lang;
+    } else {
+        speech.lang = "en-IN";
+    }
+
+    // J.A.R.V.I.S-style voice
+    speech.rate = 0.92;
+    speech.pitch = 0.85;
+    speech.volume = 1.0;
+
+    window.speechSynthesis.speak(speech);
+}
+
+// ============================================================
+// API KEY
+// ============================================================
+
+function getApiKey() {
+    let key = localStorage.getItem("jarvis_key");
+
+    if (!key) {
+        key = prompt("Enter your Gemini API key:");
+
+        if (key) {
+            localStorage.setItem("jarvis_key", key.trim());
+        }
+    }
+
+    return key;
+}
+
+// ============================================================
+// OPEN / SEARCH TOOLS
+// ============================================================
+
+function openUrl(url) {
+    window.open(url, "_blank");
+}
+
+function googleSearch(query) {
+    openUrl(
+        "https://www.google.com/search?q=" +
+        encodeURIComponent(query)
+    );
+}
+
+function youtubeSearch(query) {
+    openUrl(
+        "https://www.youtube.com/results?search_query=" +
+        encodeURIComponent(query)
+    );
+}
+
+function youtubePlay(query) {
+    openUrl(
+        "https://www.youtube.com/results?search_query=" +
+        encodeURIComponent(query)
+    );
+}
+
+function wikipediaSearch(query) {
+    openUrl(
+        "https://en.wikipedia.org/wiki/Special:Search?search=" +
+        encodeURIComponent(query)
+    );
+}
+
+// ============================================================
+// BASIC TOOLS
+// ============================================================
+
+function getTime() {
+    return new Date().toLocaleTimeString("en-IN", {
+        hour: "numeric",
+        minute: "2-digit",
+        second: "2-digit"
     });
 }
 
+function getDate() {
+    return new Date().toLocaleDateString("en-IN", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric"
+    });
+}
 
-// ===================== 5. FETCH HELPER =====================
+function rollDice() {
+    return String(Math.floor(Math.random() * 6) + 1);
+}
 
-async function fetchToolJson(
-    url,
-    options = {},
-    timeoutMs = 10000
-) {
-    const controller =
-        typeof AbortController !== "undefined"
-            ? new AbortController()
-            : null;
+function flipCoin() {
+    return Math.random() < 0.5 ? "Heads" : "Tails";
+}
 
-    const timer = controller
-        ? setTimeout(() => controller.abort(), timeoutMs)
-        : null;
+function tellJoke() {
+    const jokes = [
+        "Why did the computer go to the doctor? Because it had a virus.",
+        "Why was the math book sad? Because it had too many problems.",
+        "What do computers eat? Microchips."
+    ];
 
+    return jokes[Math.floor(Math.random() * jokes.length)];
+}
+
+function tellQuote() {
+    const quotes = [
+        "Stay curious and keep learning.",
+        "Small steps every day create big results.",
+        "The best way to learn is to keep trying."
+    ];
+
+    return quotes[Math.floor(Math.random() * quotes.length)];
+}
+
+// ============================================================
+// TIMER
+// ============================================================
+
+function startTimer(seconds) {
+    setTimeout(() => {
+        addMessage("J.A.R.V.I.S", "Timer finished.");
+        speakJarvis("Timer finished.");
+    }, seconds * 1000);
+
+    return `Timer started for ${seconds} seconds.`;
+}
+
+// ============================================================
+// BITCOIN
+// ============================================================
+
+async function getBitcoinPrice() {
     try {
-        const response = await fetch(url, {
-            ...options,
-            ...(controller ? { signal: controller.signal } : {})
-        });
+        const response = await fetch(
+            "https://api.coindesk.com/v1/bpi/currentprice/USD.json"
+        );
 
-        if (!response.ok) {
-            throw new Error("HTTP " + response.status);
-        }
+        const data = await response.json();
 
-        return await response.json();
-
-    } finally {
-        if (timer) clearTimeout(timer);
+        return `Bitcoin price is approximately ${data.bpi.USD.rate} USD.`;
+    } catch {
+        return "I could not get the Bitcoin price right now.";
     }
 }
 
+// ============================================================
+// TOOL PROCESSOR
+// ============================================================
 
-// ===================== 6. TOOLS =====================
+async function runTool(command) {
+    const text = command.toLowerCase().trim();
 
-async function handleTools(text) {
-
-    const original = String(text || "").trim();
-    const t = original.toLowerCase();
-
-    // ---------- YouTube ----------
     if (
-        /^(please\s+)?(open\s+)?youtube$/i.test(original)
+        text.includes("open youtube") &&
+        !text.includes("search")
     ) {
-        window.open(
-            "https://www.youtube.com/",
-            "_blank"
-        );
-
-        return "Opening YouTube, Boss.";
+        openUrl("https://www.youtube.com/");
+        return "Opening YouTube.";
     }
 
-
-    // ---------- Google ----------
     if (
-        /^(please\s+)?(open\s+)?google$/i.test(original)
+        text.includes("open google") &&
+        !text.includes("search")
     ) {
-        window.open(
-            "https://www.google.com/",
-            "_blank"
-        );
-
-        return "Opening Google, Boss.";
+        openUrl("https://www.google.com/");
+        return "Opening Google.";
     }
 
-
-    // ---------- Open URL ----------
-    const urlMatch = original.match(
-        /^(?:open|visit|go to)\s+(https?:\/\/\S+)$/i
-    );
-
-    if (urlMatch) {
-
-        try {
-            const destination = new URL(urlMatch[1]);
-
-            if (
-                destination.protocol !== "https:" &&
-                destination.protocol !== "http:"
-            ) {
-                return "Only HTTP and HTTPS links can be opened.";
-            }
-
-            window.open(
-                destination.href,
-                "_blank"
-            );
-
-            return (
-                "Opening " +
-                destination.hostname +
-                ", Boss."
-            );
-
-        } catch {
-            return "That link does not look valid.";
-        }
+    if (text.startsWith("google search ")) {
+        const query = command.substring(14).trim();
+        googleSearch(query);
+        return `Searching Google for ${query}.`;
     }
 
-
-    // ---------- Google Search ----------
-    const googleSearch = original.match(
-        /^(?:google\s+search|search\s+(?:on\s+)?google)(?:\s+for)?\s+(.+)$/i
-    );
-
-    if (googleSearch) {
-
-        const query = googleSearch[1].trim();
-
-        window.open(
-            "https://www.google.com/search?q=" +
-            encodeURIComponent(query),
-            "_blank"
-        );
-
-        return (
-            "Searching Google for " +
-            query +
-            ", Boss."
-        );
+    if (text.startsWith("search google for ")) {
+        const query = command.substring(18).trim();
+        googleSearch(query);
+        return `Searching Google for ${query}.`;
     }
 
-
-    // ---------- YouTube Search / Play ----------
-    const youtubeSearch = original.match(
-        /^(?:play|youtube(?:\s+search)?|search\s+(?:on\s+)?youtube)(?:\s+for)?\s+(.+)$/i
-    );
-
-    if (youtubeSearch) {
-
-        const query = youtubeSearch[1].trim();
-
-        window.open(
-            "https://www.youtube.com/results?search_query=" +
-            encodeURIComponent(query),
-            "_blank"
-        );
-
-        return (
-            "Searching YouTube for " +
-            query +
-            ", Boss."
-        );
+    if (text.startsWith("youtube search ")) {
+        const query = command.substring(15).trim();
+        youtubeSearch(query);
+        return `Searching YouTube for ${query}.`;
     }
 
+    if (text.includes("youtube") && text.includes("play")) {
+        const query = command
+            .replace(/youtube/i, "")
+            .replace(/play/i, "")
+            .trim();
 
-    // ---------- Wikipedia Search ----------
-    const wikiSearch = original.match(
-        /^(?:search|look up)(?:\s+for)?\s+(.+)$/i
-    );
+        youtubePlay(query);
 
-    if (wikiSearch) {
-
-        const query = wikiSearch[1].trim();
-
-        try {
-
-            const url =
-                "https://en.wikipedia.org/w/api.php" +
-                "?action=query" +
-                "&list=search" +
-                "&srlimit=1" +
-                "&srsearch=" +
-                encodeURIComponent(query) +
-                "&format=json" +
-                "&origin=*";
-
-            const data = await fetchToolJson(url);
-
-            const result =
-                data?.query?.search?.[0];
-
-            if (!result) {
-                return "I could not find that, Boss.";
-            }
-
-            const snippet = String(
-                result.snippet || ""
-            )
-                .replace(/<[^>]*>/g, "")
-                .replace(/&quot;/g, '"')
-                .replace(/&#39;/g, "'")
-                .replace(/&amp;/g, "&")
-                .replace(/&lt;/g, "<")
-                .replace(/&gt;/g, ">");
-
-            return (
-                "Wikipedia: " +
-                result.title +
-                (snippet ? ". " + snippet : "")
-            );
-
-        } catch {
-            return "Wikipedia search failed, Boss.";
-        }
+        return `Opening YouTube results for ${query}.`;
     }
 
+    if (text.startsWith("wikipedia ")) {
+        const query = command.substring(10).trim();
+        wikipediaSearch(query);
+        return `Opening Wikipedia for ${query}.`;
+    }
 
-    // ---------- Current Time ----------
     if (
-        /\b(current\s+time|what\s+time|time\s+now)\b/i.test(t)
+        text.includes("what time") ||
+        text === "time" ||
+        text.includes("current time")
     ) {
-        return (
-            "Current time is " +
-            new Date().toLocaleTimeString("en-IN", {
-                timeZone: "Asia/Kolkata"
-            }) +
-            ", Boss."
-        );
+        return `The current time is ${getTime()}.`;
     }
 
-
-    // ---------- Date ----------
     if (
-        /\b(today'?s\s+date|what\s+date|today)\b/i.test(t)
+        text.includes("today's date") ||
+        text.includes("what date") ||
+        text === "date"
     ) {
-        return (
-            "Today is " +
-            new Date().toLocaleDateString("en-IN", {
-                timeZone: "Asia/Kolkata",
-                dateStyle: "full"
-            }) +
-            ", Boss."
-        );
+        return `Today is ${getDate()}.`;
     }
 
-
-    // ---------- Dice ----------
-    if (/\bdice\b/i.test(t)) {
-        return (
-            "🎲 You rolled " +
-            (Math.floor(Math.random() * 6) + 1) +
-            ", Boss."
-        );
+    if (text.includes("roll dice") || text.includes("roll a dice")) {
+        return `The dice shows ${rollDice()}.`;
     }
 
-
-    // ---------- Coin ----------
-    if (/\bcoin\b/i.test(t)) {
-        return (
-            "🪙 " +
-            (Math.random() < 0.5 ? "Heads" : "Tails") +
-            ", Boss."
-        );
+    if (
+        text.includes("flip coin") ||
+        text.includes("toss coin")
+    ) {
+        return `The result is ${flipCoin()}.`;
     }
 
-
-    // ---------- Joke ----------
-    if (/\bjoke\b/i.test(t)) {
-        const jokes = [
-            "Why did the computer go to the doctor? It had a virus.",
-            "Why was the computer cold? It left its Windows open.",
-            "Why do programmers prefer dark mode? Because light attracts bugs."
-        ];
-
-        return jokes[
-            Math.floor(Math.random() * jokes.length)
-        ];
+    if (text.includes("tell me a joke") || text === "joke") {
+        return tellJoke();
     }
 
-
-    // ---------- Quote ----------
-    if (/\bquote\b/i.test(t)) {
-        const quotes = [
-            "Small steps every day lead to big results.",
-            "Keep learning. Keep building.",
-            "The best way to learn is to build."
-        ];
-
-        return quotes[
-            Math.floor(Math.random() * quotes.length)
-        ];
+    if (text.includes("give me a quote") || text === "quote") {
+        return tellQuote();
     }
 
+    if (text.includes("bitcoin")) {
+        return await getBitcoinPrice();
+    }
 
-    // ---------- Timer ----------
-    const timerMatch = t.match(
-        /\b(?:timer|set timer)\s+(\d+)\s*(seconds?|minutes?|mins?|hours?|hrs?)?/i
-    );
+    // Timer example:
+    // "timer 10"
+    const timerMatch = text.match(/timer\s+(\d+)/);
 
     if (timerMatch) {
+        const seconds = Number(timerMatch[1]);
 
-        const amount = Number(timerMatch[1]);
-        const unit = timerMatch[2] || "minutes";
-
-        let seconds = amount;
-
-        if (/hour|hr/i.test(unit)) {
-            seconds = amount * 3600;
-        } else if (/minute|min/i.test(unit)) {
-            seconds = amount * 60;
-        }
-
-        setTimeout(() => {
-            alert("⏰ J.A.R.V.I.S Timer finished!");
-        }, seconds * 1000);
-
-        return (
-            "Timer set for " +
-            amount +
-            " " +
-            unit +
-            ", Boss."
-        );
-    }
-
-
-    // ---------- Bitcoin ----------
-    if (
-        /\b(bitcoin|btc|crypto)\b/i.test(t)
-    ) {
-
-        try {
-
-            const data = await fetchToolJson(
-                "https://api.coindesk.com/v1/bpi/currentprice/USD.json"
-            );
-
-            const price =
-                data?.bpi?.USD?.rate;
-
-            if (price) {
-                return (
-                    "Bitcoin is approximately $" +
-                    price +
-                    " USD."
-                );
-            }
-
-        } catch {
-            return "Bitcoin price is unavailable right now.";
+        if (seconds > 0 && seconds <= 3600) {
+            return startTimer(seconds);
         }
     }
-
 
     return null;
 }
 
+// ============================================================
+// GEMINI API
+// ============================================================
 
-// ===================== 7. GEMINI =====================
+async function callGeminiRaw(prompt, model) {
+    const apiKey = getApiKey();
 
-async function callGeminiRaw(prompt) {
+    if (!apiKey) {
+        throw new Error("Gemini API key is missing.");
+    }
 
-    if (!API_KEY) {
+    const url =
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+    const response = await fetch(url, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            contents: [
+                {
+                    role: "user",
+                    parts: [
+                        {
+                            text: prompt
+                        }
+                    ]
+                }
+            ]
+        })
+    });
+
+    if (!response.ok) {
         throw new Error(
-            "Gemini API key is missing."
+            `Gemini API error: ${response.status}`
         );
     }
 
-    const contents = MEMORY
-        .slice(-12)
-        .map(m => ({
-            role: m.role,
-            parts: [
-                {
-                    text: m.text
-                }
-            ]
-        }));
+    const data = await response.json();
 
-    contents.push({
-        role: "user",
-        parts: [
-            {
-                text: prompt
-            }
-        ]
-    });
+    return (
+        data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+        "I could not generate a response."
+    );
+}
 
+// ============================================================
+// GEMINI WITH MODEL FALLBACK
+// ============================================================
+
+async function callGemini(prompt) {
     let lastError = null;
 
     for (const model of MODELS) {
-
         try {
-
-            const url =
-                "https://generativelanguage.googleapis.com/v1beta/models/" +
-                model +
-                ":generateContent?key=" +
-                encodeURIComponent(API_KEY);
-
-            const response = await fetch(url, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    contents: contents
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error(
-                    "Gemini HTTP " +
-                    response.status
-                );
-            }
-
-            const data = await response.json();
-
-            const answer =
-                data?.candidates?.[0]?.content?.parts
-                    ?.map(p => p.text || "")
-                    .join("")
-                    .trim();
-
-            if (answer) {
-                return answer;
-            }
-
+            return await callGeminiRaw(prompt, model);
         } catch (error) {
+            console.log(`Model failed: ${model}`, error);
             lastError = error;
         }
     }
 
-    throw lastError ||
-        new Error("Gemini did not return a response.");
+    throw lastError || new Error("All Gemini models failed.");
 }
 
+// ============================================================
+// AGENT MODE
+// ============================================================
 
-async function callGemini(prompt) {
-
-    const answer = await callGeminiRaw(prompt);
-
-    remember("user", prompt);
-    remember("model", answer);
-
-    return answer;
-}
-
-
-// ===================== 8. AGENT MODE =====================
-
-const AGENT_TOOLS = {
-
-    time: async () =>
-        handleTools("current time"),
-
-    weather: async () =>
-        "Weather tool ready. Ask J.A.R.V.I.S for the weather.",
-
-    news: async () =>
-        "News tool ready. Ask J.A.R.V.I.S for current news.",
-
-    crypto: async () =>
-        handleTools("bitcoin")
-};
-
-
-function isAgentModeRequest(text = "") {
-
-    return /\b(agent|agent mode|run agent|use agent|briefing|research|analysis)\b/i
-        .test(text);
-}
-
-
-async function runAgent(goal) {
-
-    add(
-        "J.A.R.V.I.S: Agent mode active.",
-        "ai"
-    );
-
-    const results = {};
-
-    results.time =
-        await AGENT_TOOLS.time();
+async function agentMode(command) {
+    const lower = command.toLowerCase();
 
     if (
-        /\b(weather)\b/i.test(goal)
+        lower.includes("time") ||
+        lower.includes("date")
     ) {
-        results.weather =
-            await AGENT_TOOLS.weather();
+        return `The current time is ${getTime()} and today is ${getDate()}.`;
     }
 
     if (
-        /\b(news)\b/i.test(goal)
+        lower.includes("search") ||
+        lower.includes("google")
     ) {
-        results.news =
-            await AGENT_TOOLS.news();
+        googleSearch(command);
+        return "I opened Google search for your request.";
     }
 
-    if (
-        /\b(bitcoin|btc|crypto)\b/i.test(goal)
-    ) {
-        results.crypto =
-            await AGENT_TOOLS.crypto();
+    if (lower.includes("youtube")) {
+        youtubeSearch(command);
+        return "I opened YouTube search for your request.";
     }
 
-    const summaryPrompt =
-        "You are J.A.R.V.I.S. Give a concise Telugu-English response.\n\n" +
-        "Goal: " +
-        goal +
-        "\n\nTool results:\n" +
-        JSON.stringify(results);
-
-    return await callGemini(summaryPrompt);
+    return null;
 }
 
+// ============================================================
+// MAIN MESSAGE PROCESSOR
+// ============================================================
 
-// ===================== 9. MAIN COMMAND =====================
+async function processMessage(command) {
+    command = String(command || "").trim();
 
-async function processMessage(text) {
+    if (!command) return;
 
-    text = String(text || "").trim();
+    addMessage("USER", command);
+    saveMemory("user", command);
 
-    if (!text) return;
-
-    add(
-        "YOU: " + text,
-        "user"
-    );
-
-    remember("user", text);
-
-    // Agent mode
-    if (isAgentModeRequest(text)) {
-
-        try {
-
-            const result =
-                await runAgent(text);
-
-            add(
-                "J.A.R.V.I.S: " + result,
-                "ai"
-            );
-
-            remember("model", result);
-
-        } catch (error) {
-
-            add(
-                "J.A.R.V.I.S: Agent error.",
-                "ai"
-            );
-        }
-
-        return;
+    // Stop speaking if user starts a new command
+    if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
     }
 
+    // --------------------------------------------------------
+    // Normal tools
+    // --------------------------------------------------------
 
-    // Tools
     try {
-
-        const toolResult =
-            await handleTools(text);
+        const toolResult = await runTool(command);
 
         if (toolResult) {
+            addMessage("J.A.R.V.I.S", toolResult);
+            saveMemory("assistant", toolResult);
 
-            add(
-                "J.A.R.V.I.S: " +
-                toolResult,
-                "ai"
-            );
-
-            remember(
-                "model",
-                toolResult
-            );
+            // MAKE J.A.R.V.I.S TALK
+            speakJarvis(toolResult);
 
             return;
         }
-
     } catch (error) {
-
-        console.error(
-            "Tool error:",
-            error
-        );
+        console.error(error);
     }
 
-
-    // Gemini
-    add(
-        "J.A.R.V.I.S: Thinking...",
-        "ai"
-    );
+    // --------------------------------------------------------
+    // Agent mode
+    // --------------------------------------------------------
 
     try {
+        const agentResult = await agentMode(command);
 
-        const answer =
-            await callGemini(text);
+        if (agentResult) {
+            addMessage("J.A.R.V.I.S", agentResult);
+            saveMemory("assistant", agentResult);
 
-        // Replace the temporary thinking message
-        const messages =
-            chat?.querySelectorAll(".message.ai");
+            // MAKE J.A.R.V.I.S TALK
+            speakJarvis(agentResult);
 
-        if (messages?.length) {
-            messages[messages.length - 1].textContent =
-                "J.A.R.V.I.S: " + answer;
-        } else {
-            add(
-                "J.A.R.V.I.S: " + answer,
-                "ai"
-            );
+            return;
         }
+    } catch (error) {
+        console.error(error);
+    }
+
+    // --------------------------------------------------------
+    // Gemini
+    // --------------------------------------------------------
+
+    try {
+        const memory = getMemory()
+            .slice(-10)
+            .map(item => `${item.role}: ${item.text}`)
+            .join("\n");
+
+        const prompt = `
+You are J.A.R.V.I.S, a helpful personal AI assistant.
+
+Answer naturally and clearly.
+Keep normal answers reasonably short because your answer will be spoken aloud.
+
+Previous conversation:
+${memory}
+
+Current user command:
+${command}
+
+Respond directly to the user.
+        `;
+
+        const answer = await callGemini(prompt);
+
+        addMessage("J.A.R.V.I.S", answer);
+        saveMemory("assistant", answer);
+
+        // MAKE J.A.R.V.I.S TALK
+        speakJarvis(answer);
 
     } catch (error) {
+        console.error(error);
 
-        console.error(
-            "Gemini error:",
-            error
-        );
+        const errorMessage =
+            "I am having trouble connecting to my AI system right now.";
 
-        const messages =
-            chat?.querySelectorAll(".message.ai");
-
-        if (messages?.length) {
-            messages[messages.length - 1].textContent =
-                "J.A.R.V.I.S: Sorry Boss, I couldn't connect to Gemini.";
-        }
+        addMessage("J.A.R.V.I.S", errorMessage);
+        speakJarvis(errorMessage);
     }
 }
 
-
-// ===================== 10. SEND BUTTON =====================
-
-function sendMessage() {
-
-    if (!input) return;
-
-    const text = input.value.trim();
-
-    if (!text) return;
-
-    input.value = "";
-
-    processMessage(text);
-}
-
+// ============================================================
+// SEND BUTTON
+// ============================================================
 
 if (sendBtn) {
+    sendBtn.addEventListener("click", () => {
+        const command = msg?.value.trim();
 
-    sendBtn.addEventListener(
-        "click",
-        function (event) {
+        if (!command) return;
 
+        msg.value = "";
+        processMessage(command);
+    });
+}
+
+// ============================================================
+// ENTER KEY
+// ============================================================
+
+if (msg) {
+    msg.addEventListener("keydown", event => {
+        if (event.key === "Enter") {
             event.preventDefault();
 
-            sendMessage();
+            const command = msg.value.trim();
+
+            if (!command) return;
+
+            msg.value = "";
+            processMessage(command);
         }
-    );
+    });
 }
 
-
-// ===================== 11. ENTER KEY =====================
-
-if (input) {
-
-    input.addEventListener(
-        "keydown",
-        function (event) {
-
-            if (
-                event.key === "Enter" &&
-                !event.shiftKey
-            ) {
-
-                event.preventDefault();
-
-                sendMessage();
-            }
-        }
-    );
-}
-
-
-// ===================== 12. CLEAR BUTTON =====================
+// ============================================================
+// CLEAR MEMORY BUTTON
+// ============================================================
 
 if (clearBtn) {
-
-    clearBtn.addEventListener(
-        "click",
-        function () {
-
-            MEMORY = [];
-
-            localStorage.removeItem(
-                "jarvis_memory"
-            );
-
-            if (chat) {
-                chat.innerHTML = "";
-            }
-
-            add(
-                "J.A.R.V.I.S: Memory cleared, Boss.",
-                "ai"
-            );
-        }
-    );
+    clearBtn.addEventListener("click", () => {
+        clearMemory();
+    });
 }
 
-
-// ===================== 13. CAMERA BUTTON =====================
+// ============================================================
+// CAMERA BUTTON
+// ============================================================
 
 if (camBtn && imgInput) {
+    camBtn.addEventListener("click", () => {
+        imgInput.click();
+    });
 
-    camBtn.addEventListener(
-        "click",
-        function () {
+    imgInput.addEventListener("change", () => {
+        const file = imgInput.files?.[0];
 
-            imgInput.click();
-        }
-    );
+        if (!file) return;
+
+        addMessage(
+            "J.A.R.V.I.S",
+            `Image selected: ${file.name}`
+        );
+
+        speakJarvis("Image selected.");
+    });
 }
 
-
-// ===================== 14. IMAGE INPUT =====================
-
-if (imgInput) {
-
-    imgInput.addEventListener(
-        "change",
-        async function () {
-
-            const file =
-                imgInput.files?.[0];
-
-            if (!file) return;
-
-            add(
-                "YOU: Image selected",
-                "user"
-            );
-
-            add(
-                "J.A.R.V.I.S: Image received, Boss. Image analysis can be added to the Gemini vision step.",
-                "ai"
-            );
-
-            imgInput.value = "";
-        }
-    );
-}
-
-
-// ===================== 15. MICROPHONE =====================
-
-let recognition = null;
+// ============================================================
+// VOICE INPUT — MICROPHONE
+// ============================================================
 
 const SpeechRecognition =
     window.SpeechRecognition ||
     window.webkitSpeechRecognition;
 
-if (SpeechRecognition) {
+let recognition = null;
 
-    recognition =
-        new SpeechRecognition();
+if (SpeechRecognition && micBtn) {
+
+    recognition = new SpeechRecognition();
 
     recognition.lang = "en-IN";
-
+    recognition.continuous = false;
     recognition.interimResults = false;
 
-    recognition.continuous = false;
+    micBtn.addEventListener("click", () => {
 
-
-    recognition.onstart = function () {
-
-        if (micBtn) {
+        try {
+            recognition.start();
             micBtn.textContent = "🔴";
+        } catch (error) {
+            console.log("Microphone already active.");
         }
-    };
 
+    });
 
-    recognition.onend = function () {
-
-        if (micBtn) {
-            micBtn.textContent = "🎤";
-        }
-    };
-
-
-    recognition.onerror = function (event) {
-
-        console.error(
-            "Speech recognition:",
-            event.error
-        );
-
-        if (micBtn) {
-            micBtn.textContent = "🎤";
-        }
-    };
-
-
-    recognition.onresult = function (event) {
+    recognition.onresult = event => {
 
         const transcript =
             event.results[0][0].transcript;
 
-        if (input) {
-            input.value = transcript;
+        if (msg) {
+            msg.value = transcript;
         }
 
-        sendMessage();
+        micBtn.textContent = "🎤";
+
+        processMessage(transcript);
     };
 
+    recognition.onerror = event => {
 
-    if (micBtn) {
-
-        micBtn.addEventListener(
-            "click",
-            function () {
-
-                try {
-                    recognition.start();
-                } catch (error) {
-                    console.log(
-                        "Microphone already running."
-                    );
-                }
-            }
+        console.log(
+            "Speech recognition error:",
+            event.error
         );
-    }
+
+        micBtn.textContent = "🎤";
+    };
+
+    recognition.onend = () => {
+        micBtn.textContent = "🎤";
+    };
 
 } else {
-
-    if (micBtn) {
-
-        micBtn.addEventListener(
-            "click",
-            function () {
-
-                alert(
-                    "Speech recognition is not supported in this browser."
-                );
-            }
-        );
-    }
+    console.log(
+        "Speech recognition is not supported in this browser."
+    );
 }
 
+// ============================================================
+// STARTUP
+// ============================================================
 
-// ===================== 16. STARTUP =====================
-
-showMemory();
-
+console.log("================================");
+console.log("J.A.R.V.I.S Episode 7 loaded.");
+console.log("Voice input: READY");
 console.log(
-    "J.A.R.V.I.S Episode 7 loaded successfully."
+    "Voice output:",
+    "speechSynthesis" in window ? "READY" : "NOT SUPPORTED"
 );
-
-console.log(
-    "Buttons:",
-    {
-        mic: !!micBtn,
-        clear: !!clearBtn,
-        camera: !!camBtn,
-        imageInput: !!imgInput,
-        send: !!sendBtn
-    }
-);
+console.log("Tools: READY");
+console.log("Memory: READY");
+console.log("================================");
