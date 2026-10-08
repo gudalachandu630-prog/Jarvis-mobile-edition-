@@ -22,7 +22,7 @@ localStorage.removeItem('jarvis_memory');
 function saveMemory(){ localStorage.setItem('jarvis_memory', JSON.stringify(MEMORY)); }
 const chat=document.getElementById('chat');
 const input=document.getElementById('msg');
-const micBtn=document.getElementById('mic-btn');
+const micBtn=document.getElementById('send');
 const clearBtn=document.getElementById('clear-btn');
 const camBtn=document.getElementById('cam-btn');
 const imgInput=document.getElementById('img-input');
@@ -147,3 +147,4 @@ contents.push({role:'user', parts:[{text:p}]});
 for(const m of MODELS){
 try{
 const res=await
+'sendBtn.addEventListener('click',()=&gt;{handleTools(input.value);});'
