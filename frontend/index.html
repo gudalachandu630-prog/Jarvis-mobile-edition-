@@ -1,12 +1,69 @@
-<div id="chat"></div>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<input id="msg" placeholder="Ask J.A.R.V.I.S...">
+  <title>J.A.R.V.I.S</title>
 
-<button id="send">SEND</button>
-<button id="mic-btn">🎤</button>
-<button id="clear-btn">🧹</button>
-<button id="cam-btn">📷</button>
+  <link rel="stylesheet" href="style.css">
+</head>
 
-<input type="file" id="img-input" accept="image/*" style="display:none">
+<body>
 
-<script src="script.js"></script>
+  <div class="container">
+
+    <h1>J.A.R.V.I.S</h1>
+
+    <div id="status">
+      SYSTEM ONLINE
+    </div>
+
+    <!-- Reply Area -->
+    <div id="reply">
+      Hello Tony. J.A.R.V.I.S is ready.
+    </div>
+
+    <!-- User Input -->
+    <textarea
+      id="command"
+      placeholder="Ask J.A.R.V.I.S..."
+      rows="3"
+    ></textarea>
+
+    <!-- Main Buttons -->
+    <div class="buttons">
+
+      <button id="send-btn">
+        ASK
+      </button>
+
+      <button id="mic-btn">
+        🎤
+      </button>
+
+      <button id="cam-btn">
+        📷
+      </button>
+
+      <button id="clear-btn">
+        🧹
+      </button>
+
+    </div>
+
+    <!-- Hidden Image Input -->
+    <input
+      type="file"
+      id="img-input"
+      accept="image/*"
+      capture="environment"
+      style="display:none;"
+    >
+
+  </div>
+
+  <script src="script.js"></script>
+
+</body>
+</html>
