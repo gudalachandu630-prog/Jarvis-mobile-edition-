@@ -34,3 +34,59 @@ const controller=typeof AbortController==='function'?new AbortController():null;
 const timeoutId=controller?setTimeout(()=>controller.abort(),timeoutMs):null;
 try{
 const response=await fetch(url,{...options,...(controller?{signal:controller.signal}:{})});
+async function handleTools(text){
+const t=text.toLowerCase();
+if(/^\s*(?:please\s+)?(?:open\s+youtube|youtube\s+open|youtube)(?:\s+please)?
+[.!?]*\s*$/i.test(text)){ window.open('https://youtube.com','_blank','noopener,noreferrer');
+return 'Opening YouTube, Boss.'; }
+if(/^\s*(?:please\s+)?(?:open\s+google|google\s+open|google)(?:\s+please)?
+[.!?]*\s*$/i.test(text)){ window.open('https://google.com','_blank','noopener,noreferrer');
+return 'Opening Google, Boss.'; }
+const urlCommand=text.match(/^\s*(?:open|visit|go to)\s+(https?:\/\/\S+)\s*$/i);
+if(urlCommand){
+try{
+const destination=new URL(urlCommand[1]);
+if(destination.protocol!=='https:'&&destination.protocol!=='http:') return 'Only http and
+https links can be opened.';
+window.open(destination.href,'_blank','noopener,noreferrer');
+return 'Opening '+destination.hostname+', Boss.';
+}catch(e){ return 'That link does not look valid.'; }
+}
+if(/^\s*(?:google\s+search|search\s+(?:on\s+)?google)(?:\s+for)?\s*$/i.test(text)) return
+'Tell me what to search for on Google.';
+const googleSearch=text.match(/^\s*(?:google\s+search|search\s+(?:on\s+)?google)(?:\s+for)?
+\s+(.+?)\s*$/i);
+if(googleSearch){
+const query=googleSearch[1].trim();
+if(!query) return 'Tell me what to search for on Google.';
+window.open('https://www.google.com/search?
+q='+encodeURIComponent(query),'_blank','noopener,noreferrer');
+return 'Searching Google for '+query+', Boss.';
+}
+const playMatch=text.match(/^\s*play\s+(.+?)\s*$/i);
+const youtubeMatch=text.match(/^\s*youtube(?:\s+search)?(?:\s+for)?\s+(.+?)\s*$/i);
+const searchYoutubeMatch=text.match(/^\s*search\s+(?:on\s+)?youtube(?:\s+for)?\s+
+(.+?)\s*$/i);
+const videoQuery=(playMatch||youtubeMatch||searchYoutubeMatch)?.[1]?.trim();
+if(videoQuery){
+window.open('https://www.youtube.com/results?
+search_query='+encodeURIComponent(videoQuery),'_blank','noopener,noreferrer');
+return 'Searching YouTube for '+videoQuery+', Boss.';
+}
+const searchMatch=text.match(/^\s*(?:search|look up)\s+(?:for\s+)?(.+?)\s*$/i);
+if(searchMatch){
+const query=searchMatch[1].trim();
+if(!query) return 'Tell me what to search for.';
+try{
+const url='https://en.wikipedia.org/w/api.php?
+action=query&list=search&srlimit=1&srsearch='+encodeURIComponent(query)+'&format=json&origin=*'
+;
+const data=await fetchToolJson(url);
+const result=data?.query?.search?.[0];
+if(!result) return 'I could not find that, Boss.';
+const
+snippet=String(result.snippet||'').replace(/<[^>]*>/g,'').replace(/"/g,'"').replace(/�?
+39;/g,"'").replace(/&/g,'&').replace(/</g,'<').replace(/>/g,'>');
+return 'Wikipedia summary: '+result.title+(snippet?'. '+snippet:'');
+}catch(e){ return 'Search error, Boss.'; }
+}
