@@ -90,3 +90,60 @@ snippet=String(result.snippet||'').replace(/<[^>]*>/g,'').replace(/"/g,'"').repl
 return 'Wikipedia summary: '+result.title+(snippet?'. '+snippet:'');
 }catch(e){ return 'Search error, Boss.'; }
 }
+// ===== 3.5. AGENT MODE ENGINE =====
+const AGENT_TOOLS = Object.freeze({
+time: async () => handleTools('current time'),
+weather: async () => handleTools('weather'),
+news: async () => handleTools('news'),
+crypto: async () => handleTools('bitcoin')
+});
+const AGENT_TOOL_NAMES = Object.freeze({ time: 'time', weather: 'weather', news: 'news',
+crypto: 'crypto' });
+function isAgentModeRequest(text=''){
+const value=String(text||'');
+if(/\b(?:agent(?:\s+mode)?|run\s+(?:the\s+)?agent|use\s+(?:the\s+)?agent)\b/i.test(value))
+return true;
+if(/\b(?:briefing|research|analy[sz]e|analysis)\b/i.test(value)) return true;
+return /\bplan\b/i.test(value)&&/\b(?:time|weather|news|crypto|bitcoin|btc)\b/i.test(value);
+}
+function parseAgentToolPlan(responseText){
+const text=String(responseText||'').trim().replace(/^```(?:json)?
+\s*/i,'').replace(/\s*```$/,'');
+const start=text.indexOf('['), end=text.lastIndexOf(']');
+if(start<0||end<start) throw new Error('Agent plan format incorrect.');
+let parsed = JSON.parse(text.slice(start,end+1));
+const allowed=new Set(Object.keys(AGENT_TOOLS));
+return [...new Set(parsed.filter(item=>typeof
+item==='string').map(item=>item.trim().toLowerCase()).filter(item=>allowed.has(item)))];
+}
+async function runAgent(goal){
+add('J.A.R.V.I.S: Agent mode active.','ai');
+add('J.A.R.V.I.S: Goal analyze chesthunna...','ai');
+const planPrompt='Select tools from ["time","weather","news","crypto"]. Goal:
+'+JSON.stringify(String(goal));
+let toolsToRun;
+try{
+toolsToRun=parseAgentToolPlan(await callGeminiRaw(planPrompt));
+}catch(error){
+toolsToRun=fallbackAgentToolPlan(goal);
+}
+const results={};
+for(let i=0;i<toolsToRun.length;i++){
+const tool=toolsToRun[i];
+add('J.A.R.V.I.S: ['+(i+1)+'/'+toolsToRun.length+'] '+AGENT_TOOL_NAMES[tool]+' tool run
+chesthunna...','ai');
+try{ results[tool]=await AGENT_TOOLS[tool](); }catch(e){ results[tool]='Tool error'; }
+}
+add('J.A.R.V.I.S: Results combine chesthunna...','ai');
+const summaryPrompt='Goal: '+JSON.stringify(String(goal))+'. Tool results:
+'+JSON.stringify(results)+'. Give concise Telugu/English summary.';
+return await callGemini(summaryPrompt);
+}
+// ===== 4. GEMINI BRAIN =====
+async function callGemini(p){
+if(!API_KEY) throw new Error('Gemini API key is missing.');
+const contents = MEMORY.slice(-12).map(m=>({role:m.role, parts:[{text:m.text}]}));
+contents.push({role:'user', parts:[{text:p}]});
+for(const m of MODELS){
+try{
+const res=await
