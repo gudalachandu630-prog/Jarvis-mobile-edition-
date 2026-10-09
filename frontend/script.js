@@ -398,3 +398,117 @@ function telugishToolReply(r){
   if(r.includes(' means: ')){ parts=r.split(' means: '); return parts[0]+' అంటే: '+parts.slice(1).join(' means: '); }
   if(r.startsWith('Could not retrieve')) return 'ఈ పదానికి meaning ఇప్పుడే దొరకలేదు. కొద్దిసేపటికి మళ్లీ try చేద్దాం.';
   if(r.startsWith('Your strong password: ')) return 'ఇదిగో strong password: '+r.slice('Your strong password: '.length);
+  if(r.startsWith('Secure password generation')) return 'ఈ browserలో secure password generate చేయడం అందుబాటులో లేదు.';
+  if(r.startsWith('Opening YouTube')) return 'YouTube ఓపెన్ చేస్తున్నాను.';
+  if(r.startsWith('Opening Google')) return 'Google ఓపెన్ చేస్తున్నాను.';
+  if(r.startsWith('Opening ')) return r.replace(', Boss.','')+' చేస్తున్నాను.';
+  if(r.startsWith('Searching Google for ')) return 'Googleలో '+r.slice(21).replace(', Boss.','')+' కోసం వెతుకుతున్నాను.';
+  if(r.startsWith('Searching YouTube for ')) return 'YouTubeలో '+r.slice(22).replace(', Boss.','')+' కోసం వెతుకుతున్నాను.';
+  if(r.startsWith('Tell me a song or search phrase for YouTube')) return 'YouTube kosam song leda search phrase cheppu.';
+  if(r.startsWith('Only http and https')) return 'Http లేదా https link మాత్రమే open చేయగలను.';
+  if(r.startsWith('That link does not look valid')) return 'ఈ link validగా కనిపించడం లేదు.';
+  if(r.startsWith('Bitcoin is ')){ parts=r.slice(11).split(' dollars, '); return 'Bitcoin ధర ఇప్పుడు $'+parts[0]+' (సుమారు ₹'+parts[1].split(' rupees')[0]+').'; }
+  if(r.includes(' ... ')) return 'ఇదిగో ఒక joke: '+r;
+  if(r.startsWith('I could not find that')) return 'Wikipediaలో ఆ విషయం దొరకలేదు.';
+  if(r.startsWith('Tell me what to search for on Google')) return 'Googleలో em search cheyyalo cheppu.';
+  if(r.startsWith('Tell me what to search')) return 'Em search cheyyalo cheppu.';
+  if(r.startsWith('Search error')) return 'Search service ippudu pani cheyyatledu.';
+  if(r.startsWith('Joke service error')) return 'Joke service ippudu pani cheyyatledu.';
+  if(r.startsWith('Quote service error')) return 'Quote service ippudu pani cheyyatledu.';
+  if(r.startsWith('News service error')) return 'News service ippudu pani cheyyatledu.';
+  if(r.startsWith('Translate error')) return 'Translation ippudu dorkatledu; malli try cheyyi.';
+  if(r.startsWith('Translate format:')) return 'Telugu translation kosam “translate <text>” ani cheppu.';
+  if(r.startsWith('Currency service error')) return 'Exchange rate ippudu dorkatledu.';
+  if(r.startsWith('Crypto service error')) return 'Crypto price ippudu dorkatledu.';
+  if(r.startsWith('Enter a dollar amount')) return 'Dollar amount 0 కంటే ఎక్కువ ఇవ్వు.';
+  if(r.startsWith('Meaning format:')) return 'Meaning kosam “meaning of <word>” ani cheppu.';
+  if(r.endsWith(', Boss.')) return r.slice(0,-7)+'.';
+  return r;
+}
+async function askGemini(p){
+  add('J.A.R.V.I.S: Thinking...','ai');
+  if(isAgentModeRequest(p)){
+    try{
+      const reply=await runAgent(p);
+      MEMORY.push({role:'user',text:p}); MEMORY.push({role:'model',text:reply}); saveMemory();
+      chat.lastChild.innerText='J.A.R.V.I.S: '+reply; speak(reply);
+    }catch(e){
+      console.error('J.A.R.V.I.S agent error:',e);
+      chat.lastChild.innerText='J.A.R.V.I.S: AGENT ERROR - '+(e?.message||'Request failed.');
+    }
+    return;
+  }
+  try{
+    let toolReply=await handleTools(p);
+    const containsSecret=typeof toolReply==='string'&&toolReply.startsWith('Your strong password: ');
+    if(toolReply) toolReply=telugishToolReply(toolReply);
+    if(toolReply){
+      if(!containsSecret){ MEMORY.push({role:'user',text:p}); MEMORY.push({role:'model',text:toolReply}); saveMemory(); }
+      chat.lastChild.innerText='J.A.R.V.I.S: '+toolReply;
+      speak(containsSecret?'Password generated. Check the screen.':toolReply);
+      return;
+    }
+  }catch(e){console.error('Tool command failed:',e);chat.lastChild.innerText='J.A.R.V.I.S: Command execute cheyyalekapoyanu. Inko sari try cheddam.';return;}
+  try{
+    const reply=await callGemini(p);
+    MEMORY.push({role:'user',text:p}); MEMORY.push({role:'model',text:reply}); saveMemory();
+    chat.lastChild.innerText='J.A.R.V.I.S: '+reply; speak(reply);
+  }catch(e){ chat.lastChild.innerText='J.A.R.V.I.S: ERROR - '+e.message; }
+}
+
+// ===== 5. VISION =====
+camBtn.onclick=()=>imgInput.click();
+imgInput.onchange=()=>{
+  const file=imgInput.files[0]; if(!file)return;
+  const reader=new FileReader();
+  reader.onload=()=>{
+    const base64=reader.result.split(',')[1];
+    const q=input.value.trim()||'What do you see? Describe briefly.';
+    add('YOU: [IMAGE] '+q,'user'); input.value='';
+    askVision(base64,file.type,q);
+  };
+  reader.readAsDataURL(file);
+};
+async function askVision(base64,mime,q){
+  add('J.A.R.V.I.S: Analyzing image...','ai');
+  if(!API_KEY){chat.lastChild.innerText='J.A.R.V.I.S: ERROR - Gemini API key is missing. Reload the page and enter the key.';return;}
+  let lastErr;
+  for(const m of MODELS){
+    try{
+      const res=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+m+":generateContent?key="+encodeURIComponent(API_KEY),
+        {method:"POST",headers:{"Content-Type":"application/json"},
+         body:JSON.stringify({systemInstruction:{parts:[{text:"You are J.A.R.V.I.S, a friendly personal assistant for Tony. Reply naturally in a warm Telugu-English mix (Telugish), mostly using Telugu script for Telugu and English for technical terms. Keep replies concise, conversational, empathetic, and easy to say aloud. Avoid robotic or overly formal wording, repetitive greetings, and calling the user Boss."}]},contents:[{parts:[{text:q},{inline_data:{mime_type:mime,data:base64}}]}]})});
+      const data=await res.json();
+      if(data.error){
+        const message=data.error.message || 'Gemini image request failed.';
+        lastErr=new Error(message);
+        if(/high demand|temporar|quota|rate|unavailable|no longer available|deprecated|not found|not supported|does not exist|unknown model/i.test(message)) continue;
+        throw lastErr;
+      }
+      const reply=data?.candidates?.[0]?.content?.parts?.map(part=>part.text).filter(Boolean).join('\n');
+      if(!reply){
+        const reason=data?.promptFeedback?.blockReason || data?.candidates?.[0]?.finishReason;
+        throw new Error(reason ? 'Gemini could not analyze this image ('+reason+').' : 'Gemini returned an empty response.');
+      }
+      chat.lastChild.innerText='J.A.R.V.I.S: '+reply; speak(reply); return;
+    }catch(e){ lastErr=e; }
+  }
+  chat.lastChild.innerText='J.A.R.V.I.S: ERROR - '+lastErr.message;
+}
+
+// ===== 6. SPEECH + TTS =====
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+const rec=SR?new SR():null; if(rec)rec.lang='en-US';
+if(rec)rec.onresult=(e)=>{const t=e.results[0][0].transcript;add('YOU: '+t,'user');askGemini(t);};
+micBtn.onclick=()=>{if(!rec){add('SYSTEM: Voice input is not supported in this browser.','ai');return;}try{rec.start();micBtn.innerText='LISTENING...';}catch(e){micBtn.innerText='🎙️';}};
+if(rec)rec.onend=()=>{micBtn.innerText='🎙️';};
+let voices=[]; function loadVoices(){ if(!('speechSynthesis' in window))return; try{voices=window.speechSynthesis.getVoices();}catch(e){voices=[];} }
+loadVoices(); if('speechSynthesis' in window)window.speechSynthesis.onvoiceschanged=loadVoices;
+function speak(t){ if(!('speechSynthesis' in window)||typeof SpeechSynthesisUtterance==='undefined')return; const u=new SpeechSynthesisUtterance(t); u.rate=0.96; u.pitch=1.0;
+  const isTelugu=/[\u0C00-\u0C7F]/.test(t); const v=isTelugu?voices.find(v=>/^te[-_]/i.test(v.lang)):voices.find(v=>/^en[-_]/i.test(v.lang)); if(v){u.voice=v;u.lang=v.lang;}else if(isTelugu)u.lang='te-IN'; try{window.speechSynthesis.speak(u);}catch(e){console.warn('Speech output unavailable:',e);} }
+
+// ===== 7. SEND + CLEAR =====
+document.getElementById('send').onclick=()=>{ const t=input.value.trim(); if(!t)return;
+  add('YOU: '+t,'user'); input.value=''; askGemini(t); };
+clearBtn.onclick=()=>{ MEMORY=[]; saveMemory(); chat.innerHTML=''; add('SYSTEM: Memory cleared.','ai'); };
+function add(t,w){const d=document.createElement('div');d.className='msg '+w;d.innerText=t;chat.appendChild(d);chat.scrollTop=chat.scrollHeight;}
