@@ -1,7 +1,7 @@
 {
   "name": "NOVA Personal AI Assistant",
   "short_name": "NOVA",
-  "start_url": "./jarvis-build-log.html",
+  "start_url": "index.html",
   "display": "standalone",
   "background_color": "#07101b",
   "theme_color": "#07101b",
